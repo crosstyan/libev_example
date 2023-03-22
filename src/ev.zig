@@ -1,6 +1,10 @@
 const std = @import("std");
 const c = @import("bindings/common.zig");
 
+const EvError = error{
+    TypeError,
+};
+
 /// extract type from pointer type
 pub fn PointeeType(comptime T: type) type {
     switch (@typeInfo(T)) {
@@ -20,31 +24,55 @@ pub fn CbParamType(comptime cb_type: type) type {
             // expect it to be a pointer
             return PointeeType(param.type.?);
         },
+        .Optional => |info| {
+            const child_type = info.child;
+            return CbParamType(child_type);
+        },
+        .Pointer => |info| {
+            const child_type = info.child;
+            return CbParamType(child_type);
+        },
         else => @compileError("cbParamType: expected a function, found " ++ @typeName(cb_type)),
     }
 }
 
 /// would treat ev as a pointer to event
-pub inline fn evSetPriority(ev: anytype, pri: c.int) void {
+pub inline fn evSetPriority(ev: anytype, pri: c_int) EvError!void {
     if (!isEvPtr(ev)) {
-        @compileError("expected a pointer to event, found " ++ @typeName(ev));
+        return EvError.TypeError;
     }
     var ptr = @ptrCast(*c.ev_watcher, ev);
     ptr.priority = pri;
 }
 
 /// check if a callback function pointer is a valid event callback
-pub fn isEvCbPtr(comptime ev_cb_ptr: anytype) bool {
-    const cbT = PointeeType(ev_cb_ptr);
+pub fn isEvCbPtr(ev_cb_ptr: anytype) bool {
+    const cbT = PointeeType(@TypeOf(ev_cb_ptr));
     const paramT = CbParamType(cbT);
-    return comptime isEvType(paramT);
+    return isEvType(paramT);
 }
 
-/// should be called with `comptime`
+/// check if a type is a valid event type by looking at its field names
 pub fn isEvType(comptime T: type) bool {
-    const ev_types = .{ c.ev_watcher, c.ev_timer, c.ev_io, c.ev_signal, c.ev_idle, c.ev_prepare, c.ev_check, c.ev_fork, c.ev_cleanup, c.ev_async, c.ev_stat, c.ev_periodic, c.ev_embed, c.ev_fork };
-    for (ev_types) |t| {
-        if (T == t) return true;
+    // `ev_watcher` is the minimal struct for event
+    // active: c_int,
+    // pending: c_int,
+    // priority: c_int,
+    // data: ?*anyopaque,
+    // cb: fn,
+    // Don't bother to check its corsponding type. I just check the name.
+    // Or...I could just check the type of each field. Either way would work.
+    switch (@typeInfo(T)) {
+        .Struct => |info| {
+            const fields = info.fields;
+            if (!std.mem.eql(u8, fields[0].name, "active")) return false;
+            if (!std.mem.eql(u8, fields[1].name, "pending")) return false;
+            if (!std.mem.eql(u8, fields[2].name, "priority")) return false;
+            if (!std.mem.eql(u8, fields[3].name, "data")) return false;
+            if (!std.mem.eql(u8, fields[4].name, "cb")) return false;
+            return true;
+        },
+        else => return false,
     }
     return false;
 }
@@ -70,33 +98,46 @@ pub fn isEvPtr(ev: anytype) bool {
 /// ```
 ///
 /// would check if event type matches callback type
-pub fn evSetCb(ev: anytype, cb: anytype) void {
+pub fn evSetCb(ev: anytype, cb: anytype) EvError!void {
     // See macro `ev_set_cb`
     // no idea why the macro use memmove
     if (!isEvPtr(ev)) {
-        @compileError("expected a pointer to event, found " ++ @typeName(ev));
+        return EvError.TypeError;
     }
     if (!isEvCbPtr(cb)) {
-        @compileError("expected a pointer to event callback, found " ++ @typeName(cb));
+        return EvError.TypeError;
     }
     const lhs = PointeeType(@TypeOf(ev));
     const rhs = CbParamType(PointeeType(@TypeOf(cb)));
     if (lhs != rhs) {
         @compileError("callback type does not matches event type. " ++ @typeName(lhs) ++ " != " ++ @typeName(rhs) ++ "");
     }
-    const cb_type = *const fn (?*c.struct_ev_loop, [*c]c.struct_ev_watcher, c_int) callconv(.C) void;
+    const WatcherCbType = *const fn (?*c.struct_ev_loop, [*c]c.struct_ev_watcher, c_int) callconv(.C) void;
     var ptr = @ptrCast(*c.ev_watcher, ev);
-    var cb_ptr = @ptrCast(cb_type, cb);
+    var cb_ptr = @ptrCast(WatcherCbType, cb);
     ptr.cb = cb_ptr;
 }
 
-pub fn evInit(w: *c.ev_watcher, cb: c.ev_timer_cb) void {
+/// `ev`: a pointer to event
+/// `cb`: a pointer to callback function.
+///
+/// See also `ev_<type>_set` macro
+pub fn evInit(ev: anytype, cb: anytype) EvError!void {
     // Note for original macro
     // https://stackoverflow.com/questions/5373171/readability-a-b-c-or-a-c-b-c
-    w.active = 0;
-    w.pending = 0;
-    evSetPriority(w, 0);
-    evSetCb(w, cb);
+    if (!isEvPtr(ev)) {
+        return EvError.TypeError;
+    }
+    var ptr = @ptrCast(*c.ev_watcher, ev);
+    ptr.active = 0;
+    ptr.pending = 0;
+    try evSetPriority(ev, 0);
+    try evSetCb(ev, cb);
+}
+
+pub fn evTimerSet(ev: *c.ev_timer, at: c.ev_tstamp, repeat: c.ev_tstamp) void {
+    ev.at = at;
+    ev.repeat = repeat;
 }
 
 test "cbParamType" {
