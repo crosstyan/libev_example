@@ -1,24 +1,27 @@
 const std = @import("std");
+const c = @import("bindings/common.zig");
 
-pub fn main() !void {
-    // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
-    std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
-
-    // stdout is for the actual output of your application, for example if you
-    // are implementing gzip, then only the compressed bytes should be sent to
-    // stdout, not any debugging messages.
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
-
-    try stdout.print("Run `zig build test` to run the tests.\n", .{});
-
-    try bw.flush(); // don't forget to flush!
+fn timeout_cb(loop: ?*c.struct_ev_loop, w: *c.ev_timer, revents: c.int) callconv(.C) void {
+    _ = w;
+    _ = revents;
+    std.debug.print("timeout\n");
+    c.ev_break(loop, c.EVBREAK_ONE);
 }
 
-test "simple test" {
-    var list = std.ArrayList(i32).init(std.testing.allocator);
-    defer list.deinit(); // try commenting this out and see if zig detects the memory leak!
-    try list.append(42);
-    try std.testing.expectEqual(@as(i32, 42), list.pop());
+pub fn main() !void {
+    var loop = c.ev_default_loop(0);
+    var timer_watcher = std.mem.zeroes(c.ev_timer);
+    _ = loop;
+    _ = timer_watcher;
+    // const T = @typeInfo();
+    // const FN = @typeInfo(T.Pointer.child);
+    // const P = FN.Fn.params[1];
+    // @compileLog(@typeInfo(P.type.?).Pointer);
+    // @compileLog(cbParamType(pointeeType(cbT)));
+    // const T = @typeInfo(*c.ev_watcher);
+    // @compileLog(comptime is_ev_ptr(&t));
+    // @compileLog(T.Pointer.child);
+    // @compileLog(T.Pointer.child == c.ev_watcher);
+    // @compileLog(T);
+    // c.ev_init()
 }
