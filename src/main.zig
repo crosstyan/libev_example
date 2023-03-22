@@ -9,7 +9,7 @@ const SomeThing = struct {
     counter: *u32,
 };
 
-fn timeout_cb(loop: ?*c.struct_ev_loop, w: *c.ev_timer, revents: c_int) callconv(.C) void {
+fn timeout_cb(loop: *c.struct_ev_loop, w: *c.ev_timer, revents: c_int) callconv(.C) void {
     _ = revents;
     // type check of data field is missing
     // There's nothing I can do since the data type is declare at timer strct
