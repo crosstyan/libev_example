@@ -18,10 +18,9 @@ fn timeout_cb(loop: ?*c.struct_ev_loop, w: *c.ev_timer, revents: c_int) callconv
     const max_count = 5;
     std.debug.print("Say: {s}\t counter:{d}\n", .{ thing.content, thing.counter.* });
     thing.counter.* += 1;
-    if (thing.counter.* >= max_count) {
+    if (thing.counter.* >= max_count and thing.event != null) {
         c.ev_timer_stop(loop, thing.event);
     }
-    // c.ev_break(loop, c.EVBREAK_ONE);
 }
 
 pub fn main() !void {
@@ -43,7 +42,7 @@ pub fn main() !void {
     timer_watcher.data = thing;
     thing.event = &timer_watcher;
     try ev.evInit(&timer_watcher, &timeout_cb);
-    ev.evTimerSet(&timer_watcher, 1, 1);
+    ev.evTimerSet(&timer_watcher, 0, 1);
     c.ev_timer_start(loop, &timer_watcher);
     _ = c.ev_run(loop, 0);
 }

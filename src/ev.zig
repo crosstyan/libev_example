@@ -45,13 +45,6 @@ pub inline fn evSetPriority(ev: anytype, pri: c_int) EvError!void {
     ptr.priority = pri;
 }
 
-/// check if a callback function pointer is a valid event callback
-pub fn isEvCbPtr(ev_cb_ptr: anytype) bool {
-    const cbT = PointeeType(@TypeOf(ev_cb_ptr));
-    const paramT = CbParamType(cbT);
-    return isEvType(paramT);
-}
-
 /// check if a type is a valid event type by looking at its field names
 pub fn isEvType(comptime T: type) bool {
     // `ev_watcher` is the minimal struct for event
@@ -89,6 +82,13 @@ pub fn isEvPtr(ev: anytype) bool {
     }
 }
 
+/// check if a callback function pointer is a valid event callback
+pub fn isEvCbPtr(ev_cb_ptr: anytype) bool {
+    const cbT = PointeeType(@TypeOf(ev_cb_ptr));
+    const paramT = CbParamType(cbT);
+    return isEvType(paramT);
+}
+
 /// `ev`: a pointer to event
 /// `cb`: a pointer to callback function.
 ///
@@ -120,6 +120,11 @@ pub fn evSetCb(ev: anytype, cb: anytype) EvError!void {
 
 /// `ev`: a pointer to event
 /// `cb`: a pointer to callback function.
+///
+/// callback signature should be
+/// ```zig
+///  *const fn (?*struct_ev_loop, *event, c_int) callconv(.C) void
+/// ```
 ///
 /// See also `ev_<type>_set` macro
 pub fn evInit(ev: anytype, cb: anytype) EvError!void {
