@@ -85,6 +85,14 @@ pub fn isEvPtr(ev: anytype) bool {
 /// check if a callback function pointer is a valid event callback
 pub fn isEvCbPtr(ev_cb_ptr: anytype) bool {
     const cbT = PointeeType(@TypeOf(ev_cb_ptr));
+    switch (@typeInfo(cbT)) {
+        .Fn => |info| {
+            if (info.calling_convention != .C) {
+                return false;
+            }
+        },
+        else => return false,
+    }
     const paramT = CbParamType(cbT);
     return isEvType(paramT);
 }
